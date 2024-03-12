@@ -4,7 +4,6 @@
 #################################################
 # Written by yomgui1 & Frix_x
 # @version: 1.3
-
 # CHANGELOG:
 #   v1.4: added Shake&Tune install call
 #   v1.3: - added a warning on first install to be sure the user wants to install klippain and fixed a bug
@@ -18,17 +17,21 @@
 #   v1.0: first version of the script to allow a peaceful install and update ;)
 
 
+PRINTER_NAME=printer
 # Where the user Klipper config is located (ie. the one used by Klipper to work)
-USER_CONFIG_PATH="${HOME}/printer_data/config"
+USER_CONFIG_PATH="${HOME}/${PRINTER_NAME}_data/config"
 # Where to clone Frix-x repository config files (read-only and keep untouched)
 FRIX_CONFIG_PATH="${HOME}/klippain_config"
 # Path used to store backups when updating (backups are automatically dated when saved inside)
 BACKUP_PATH="${HOME}/klippain_config_backups"
+BACKUP_DIR="${BACKUP_PATH}/$(date +'%Y_%m_%d-%H%M%S')"
 # Where the Klipper folder is located (ie. the internal Klipper firmware machinery)
 KLIPPER_PATH="${HOME}/klipper"
+KLIPPER_SERVICE_NAME=klipper.service
 # Branch from Frix-x/klippain repo to use during install (default: main)
 FRIX_BRANCH="main"
 
+FORCE_PRINTER_NAME=$1
 
 set -eu
 export LC_ALL=C
@@ -41,10 +44,24 @@ function preflight_checks {
         exit -1
     fi
 
-    if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F 'klipper.service')" ]; then
-        printf "[PRE-CHECK] Klipper service found! Continuing...\n\n"
+    if [ "$FORCE_PRINTER_NAME" != "" ]; then
+      if [ -d "${HOME}/${FORCE_PRINTER_NAME}_data" ]; then
+        PRINTER_NAME=$FORCE_PRINTER_NAME
+        echo "[PRE-CHECK] Installing Klippain for printer: '${PRINTER_NAME}'"
+        USER_CONFIG_PATH="${HOME}/${PRINTER_NAME}_data/config"
+        KLIPPER_SERVICE_NAME=klipper-${PRINTER_NAME#printer_}      #remove any "printer_" prefix from Kiauh multi-installs
+        BACKUP_PATH=${BACKUP_PATH}/${PRINTER_NAME}
+        BACKUP_DIR="${BACKUP_PATH}/$(date +'%Y_%m_%d-%H%M%S')"
+      else
+        echo "[PRE-CHECK] target directory '${HOME}/${FORCE_PRINTER_NAME}_data' does not exist."
+        exit -1
+      fi
+    fi
+
+    if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F "${KLIPPER_SERVICE_NAME}")" ]; then
+        printf "[PRE-CHECK] ${KLIPPER_SERVICE_NAME} service found! Continuing...\n\n"
     else
-        echo "[ERROR] Klipper service not found, please install Klipper first!"
+        echo "[ERROR] ${KLIPPER_SERVICE_NAME} service not found, please install Klipper first!"
         exit -1
     fi
 
@@ -245,12 +262,9 @@ function install_mcu_templates {
 
 # Step 5: restarting Klipper
 function restart_klipper {
-    echo "[POST-INSTALL] Restarting Klipper..."
-    sudo systemctl restart klipper
+    echo "[POST-INSTALL] Restarting ${KLIPPER_SERVICE_NAME}..."
+    sudo service $KLIPPER_SERVICE_NAME restart
 }
-
-
-BACKUP_DIR="${BACKUP_PATH}/$(date +'%Y_%m_%d-%H%M%S')"
 
 printf "\n======================================\n"
 echo "- Klippain install and update script -"
@@ -263,7 +277,8 @@ backup_config
 install_config
 restart_klipper
 
-wget -O - https://raw.githubusercontent.com/Frix-x/klippain-shaketune/main/install.sh | bash
+wget -O - https://raw.githubusercontent.com/Frix-x/klippain-shaketune/main/install.sh | bash -s ${PRINTER_NAME}
+
 
 echo "[POST-INSTALL] Everything is ok, Klippain installed and up to date!"
 echo "[POST-INSTALL] Be sure to check the breaking changes on the release page: https://github.com/Frix-x/klippain/releases"
