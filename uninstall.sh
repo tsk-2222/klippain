@@ -11,15 +11,18 @@
 #         in case the install script was called by error... ;)
 
 
+PRINTER_NAME=printer
 # Where the user Klipper config is located (ie. the one used by Klipper to work)
-USER_CONFIG_PATH="${HOME}/printer_data/config"
+USER_CONFIG_PATH="${HOME}/${PRINTER_NAME}_data/config"
 # Where Frix-x repository config files are stored (Klippain read-only files that are untouched)
 FRIX_CONFIG_PATH="${HOME}/klippain_config"
 # Path used to store backups when updating (backups are automatically dated when saved inside)
 BACKUP_PATH="${HOME}/klippain_config_backups"
 # Where the Klipper folder is located (ie. the internal Klipper firmware machinery)
 KLIPPER_PATH="${HOME}/klipper"
+KLIPPER_SERVICE_NAME=klipper.service
 
+FORCE_PRINTER_NAME=$1
 
 set -eu
 export LC_ALL=C
@@ -32,10 +35,23 @@ function preflight_checks {
         exit -1
     fi
 
-    if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F 'klipper.service')" ]; then
-        printf "[PRE-CHECK] Klipper service found! Continuing...\n\n"
+   if [ "$FORCE_PRINTER_NAME" != "" ]; then
+      if [ -d "${HOME}/${FORCE_PRINTER_NAME}_data" ]; then
+        PRINTER_NAME=$FORCE_PRINTER_NAME
+        echo "[PRE-CHECK] Un-Installing Klippain for printer: '${PRINTER_NAME}'"
+        USER_CONFIG_PATH="${HOME}/${PRINTER_NAME}_data/config"
+        KLIPPER_SERVICE_NAME=klipper-${PRINTER_NAME#printer_}      #remove any "printer_" prefix from Kiauh multi-installs
+        BACKUP_PATH=${BACKUP_PATH}/${PRINTER_NAME}
+      else
+        echo "[PRE-CHECK] target directory '${HOME}/${FORCE_PRINTER_NAME}_data' does not exist."
+        exit -1
+      fi
+    fi
+
+    if [ "$(sudo systemctl list-units --full -all -t service --no-legend | grep -F "${KLIPPER_SERVICE_NAME}")" ]; then
+        printf "[PRE-CHECK] ${KLIPPER_SERVICE_NAME} service found! Continuing...\n\n"
     else
-        echo "[ERROR] Klipper service not found, Klippain is unlikely to be installed! Exiting..."
+        echo "[ERROR] ${KLIPPER_SERVICE_NAME} service not found, please install Klipper first!"
         exit -1
     fi
 
@@ -108,10 +124,10 @@ function restore_latest_backup {
     fi
 }
 
-# Step 5: Restart Klipper
+# Step 5: restarting Klipper
 function restart_klipper {
-    echo "[RESTART] Restarting Klipper..."
-    sudo systemctl restart klipper
+    echo "[POST-INSTALL] Restarting ${KLIPPER_SERVICE_NAME}..."
+    sudo service $KLIPPER_SERVICE_NAME restart
 }
 
 printf "\n=============================\n"
